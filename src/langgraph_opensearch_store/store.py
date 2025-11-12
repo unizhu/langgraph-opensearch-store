@@ -148,6 +148,20 @@ class OpenSearchStore(BaseStore):
     def ttl_manager(self) -> "TTLManager":
         return self._ttl_manager
 
+    @property
+    def ttl_config(self) -> dict[str, Any] | None:  # type: ignore[override]
+        if not self.supports_ttl:
+            return None
+        default_ttl = self.settings.ttl_minutes_default
+        refresh_on_read = self.settings.ttl_refresh_on_read
+        last_run = self.ttl_manager.last_run_at
+        return {
+            "default_ttl": default_ttl,
+            "refresh_on_read": refresh_on_read,
+            "default_ttl_minutes": default_ttl,
+            "last_sweep": last_run.isoformat() if last_run else None,
+        }
+
     # ------------------------------------------------------------------
     # BaseStore API
     def batch(self, ops: Iterable[Op]) -> list[Any]:

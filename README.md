@@ -40,9 +40,9 @@ uv run pytest
 # 6) Exercise sample code (venv must stay active)
 uv run python examples/basic_usage.py
 
-# 7) Build + publish artifacts
+# 7) Build
 uv build
-UV_PUBLISH_TOKEN=... uv publish --index https://upload.pypi.org/legacy/
+
 ```
 
 > **Tip:** Always `source .venv/bin/activate` (or prefix commands with `uv run`) before running Python
@@ -70,14 +70,13 @@ store.setup()
 
 Pass any field from `Settings` as a keyword argument; defaults mirror the `.env` example.
 
-## Repository Layout
+## Project Folder Structure
 
 - `src/langgraph_opensearch_store/` — `Settings`, OpenSearch client factory, schema helpers,
   `OpenSearchStore`, TemplateManager, and the MemorySaver bridge.
 - `examples/` — runnable scripts mirroring `docs/CODE_EXAMPLES.md`.
 - `tests/` — unit tests for the settings model + store wiring.
 - `docs/` — research notes and reference snippets for agents.
-- `.github/workflows/ci.yml` — uv-driven CI (lint, type-check, tests, build, publish-on-tag).
 
 ## Namespace Metadata & Stats
 
@@ -130,10 +129,3 @@ All CLI commands accept the same flags as `OpenSearchStore.from_params` (e.g., `
   `langgraph.opensearch.store.metrics` logger (wire it into Prometheus/Otel via your logging pipeline).
 - `store.get_health()` returns cluster info, template version, and TTL sweeper state for dashboards.
 
-## Publishing Checklist
-
-1. Bump the version in `pyproject.toml` (SemVer) and update release notes.
-2. `uv run ruff check .`, `uv run pyright`, `uv run pytest`, `uv build`.
-3. Tag the release (`git tag v0.x.y && git push --tags`).
-4. CI publishes automatically via `uv publish` when the `UV_PUBLISH_TOKEN` secret is present.
-5. Verify the release on [PyPI](https://pypi.org/project/langgraph-opensearch-store/).

@@ -226,6 +226,19 @@ When adding features, include fixtures or factories so tests don’t rely on pre
 5. Request review from the LangGraph Storage maintainers group.
 6. When preparing a release or large change, trigger the optional `contract-tests` workflow (via workflow_dispatch) to compare Postgres vs OpenSearch behavior (see `docs/CONTRACT_TESTS.md`).
 
+## 11. Publishing Checklist
+
+1. Bump the version in `pyproject.toml` (SemVer) and update release notes.
+2. `uv run ruff check .`, `uv run pyright`, `uv run pytest`, `uv build`.
+3. Tag the release (`git tag v0.x.y && git push --tags`).
+4. CI publishes automatically via `uv publish` when the `UV_PUBLISH_TOKEN` secret is present.
+5. Verify the release on [PyPI](https://pypi.org/project/langgraph-opensearch-store/).
+
+```bash
+uv build
+UV_PUBLISH_TOKEN=... uv publish --index https://upload.pypi.org/legacy/
+```
+
 ---
 
 Use this AGENTS.md whenever you need a quick refresher on how to interact with the codebase or automate changes. For deeper architectural background, see the LangGraph long-term memory docs and the OpenSearch 3.x agentic memory guides referenced in the project README.

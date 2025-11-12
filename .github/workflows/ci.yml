@@ -13,12 +13,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v2
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --extra dev
       - name: Ruff
         run: uv run ruff check .
       - name: Pyright
@@ -36,11 +36,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v2
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
-      - run: uv sync --dev
+      - run: uv sync --dev --extra dev
       - run: uv build
       - name: Publish to PyPI
         env:
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       opensearch:
-        image: opensearchproject/opensearch:2.12.0
+        image: opensearchproject/opensearch:3.1.0
         env:
           discovery.type: single-node
           plugins.security.disabled: "true"
@@ -66,7 +66,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -80,8 +80,8 @@ jobs:
       POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/postgres
       OPENSEARCH_CONN: http://admin:admin@localhost:9200
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v2
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
       - name: Install OS dependencies
@@ -91,6 +91,6 @@ jobs:
           until curl -u admin:admin http://localhost:9200 >/dev/null 2>&1; do sleep 5; done
           until pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; do sleep 5; done
       - name: Install dependencies
-        run: uv sync --dev
+        run: uv sync --dev --extra dev
       - name: Contract tests
         run: uv run pytest tests/contract -m contract

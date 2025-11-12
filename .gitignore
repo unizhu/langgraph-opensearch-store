@@ -12,3 +12,4 @@ __pycache__/
 .env
 uv.lock
 .DS_Store
+.codemachine/
