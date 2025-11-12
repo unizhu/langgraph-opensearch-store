@@ -5,6 +5,7 @@ import pytest
 from langchain_core.embeddings import Embeddings
 
 from langgraph_opensearch_store.config import Settings
+from langgraph_opensearch_store.schema import TemplateManager
 from langgraph_opensearch_store.store import OpenSearchStore
 
 
@@ -22,6 +23,7 @@ class DummyEmbeddings(Embeddings):
 @pytest.fixture()
 def store() -> OpenSearchStore:
     client = MagicMock()
+    client.snapshot = MagicMock()
     settings = Settings(hosts="http://localhost:9200")
     embeddings = DummyEmbeddings(dim=settings.embedding_dim)
     client.exists.return_value = False
@@ -117,3 +119,60 @@ def test_get_health_returns_expected_shape(store: OpenSearchStore):
     health = store.get_health()
     assert health["cluster"]["status"] == "green"
     assert "ttl" in health
+
+
+def test_index_and_embedding_properties(store: OpenSearchStore):
+    cfg = store.index_config
+    assert cfg["data_index"] == store.settings.data_index_alias
+    assert store.embeddings is store._embeddings
+
+
+def test_migrate_invokes_template_manager(monkeypatch, store: OpenSearchStore):
+    called = {}
+
+    def fake_upgrade(self, rollover: bool, new_index: str | None = None):
+        called["rollover"] = rollover
+        called["new_index"] = new_index
+        return {"rolled_over": rollover, "new_index": new_index}
+
+    monkeypatch.setattr(TemplateManager, "upgrade", fake_upgrade, raising=False)
+
+    result = store.migrate(rollover=True, new_index="custom")
+
+    assert called == {"rollover": True, "new_index": "custom"}
+    assert result == {"rolled_over": True, "new_index": "custom"}
+
+
+def test_create_snapshot_calls_client(store: OpenSearchStore):
+    store.client.snapshot.create.return_value = {"accepted": True}
+    result = store.create_snapshot(
+        repository="repo",
+        snapshot="snap",
+        indices=["a", "b"],
+        wait=False,
+        metadata={"source": "test"},
+    )
+    store.client.snapshot.create.assert_called_with(
+        repository="repo",
+        snapshot="snap",
+        body={"indices": "a,b", "metadata": {"source": "test"}},
+        wait_for_completion=False,
+    )
+    assert result == {"accepted": True}
+
+
+def test_restore_snapshot_calls_client(store: OpenSearchStore):
+    store.client.snapshot.restore.return_value = {"accepted": True}
+    store.restore_snapshot(repository="repo", snapshot="snap", indices=["a"], wait=True)
+    store.client.snapshot.restore.assert_called_with(
+        repository="repo",
+        snapshot="snap",
+        body={"indices": "a"},
+        wait_for_completion=True,
+    )
+
+
+def test_delete_snapshot_calls_client(store: OpenSearchStore):
+    store.client.snapshot.delete.return_value = {"acknowledged": True}
+    store.delete_snapshot(repository="repo", snapshot="snap")
+    store.client.snapshot.delete.assert_called_with(repository="repo", snapshot="snap")

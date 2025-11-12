@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dependencies
-        run: uv sync --dev --extra dev
+        run: uv sync --all-extras
       - name: Ruff
         run: uv run ruff check .
       - name: Pyright
@@ -40,7 +40,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
-      - run: uv sync --dev --extra dev
+      - run: uv sync --all-extras
       - run: uv build
       - name: Publish to PyPI
         env:
@@ -58,6 +58,7 @@ jobs:
           discovery.type: single-node
           plugins.security.disabled: "true"
           OPENSEARCH_INITIAL_ADMIN_PASSWORD: admin
+          "path.repo": "/usr/share/opensearch/snapshots"
         ports:
           - 9200:9200
         options: >-
@@ -90,7 +91,18 @@ jobs:
         run: |
           until curl -u admin:admin http://localhost:9200 >/dev/null 2>&1; do sleep 5; done
           until pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; do sleep 5; done
+      - name: Run store migration CLI
+        run: uv run langgraph-opensearch --conn "$OPENSEARCH_CONN" migrate --rollover
+      - name: Configure snapshot repository
+        run: |
+          curl -u admin:admin -XPUT "http://localhost:9200/_snapshot/langgraph-ci" \
+            -H 'Content-Type: application/json' \
+            -d '{"type":"fs","settings":{"location":"/usr/share/opensearch/snapshots","compress":true}}'
+      - name: Snapshot CLI smoke test
+        run: |
+          uv run langgraph-opensearch --conn "$OPENSEARCH_CONN" snapshots create --repository langgraph-ci --snapshot ci-smoke --no-wait
+          uv run langgraph-opensearch --conn "$OPENSEARCH_CONN" snapshots delete --repository langgraph-ci --snapshot ci-smoke
       - name: Install dependencies
-        run: uv sync --dev --extra dev
+        run: uv sync --all-extras
       - name: Contract tests
         run: uv run pytest tests/contract -m contract

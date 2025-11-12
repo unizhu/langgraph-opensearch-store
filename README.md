@@ -112,15 +112,26 @@ store.ttl_manager.run_once()
 
 ## Operations CLI
 
-The package exposes a CLI (installed as `langgraph-opensearch`) for quick health/ttl checks:
+The package exposes a CLI (installed as `langgraph-opensearch`) for common maintenance tasks. Commands
+accept the same flags/env vars as `OpenSearchStore.from_params` (e.g., `--auth-mode sigv4`).
 
 ```bash
+# Health & stats
 langgraph-opensearch --conn "https://user:pass@localhost:9200" health
 langgraph-opensearch --conn $OPENSEARCH_CONN stats
 langgraph-opensearch --conn $OPENSEARCH_CONN ttl-sweep --batch-size 500
+
+# Template migrations / alias rollovers
+langgraph-opensearch --conn $OPENSEARCH_CONN migrate --rollover
+langgraph-opensearch --conn $OPENSEARCH_CONN migrate --no-rollover --new-index my-data-v02
+
+# Snapshot management (fs repo must exist on the cluster)
+langgraph-opensearch --conn $OPENSEARCH_CONN snapshots create --repository langgraph --snapshot nightly --no-wait
+langgraph-opensearch --conn $OPENSEARCH_CONN snapshots delete --repository langgraph --snapshot nightly
 ```
 
-All CLI commands accept the same flags as `OpenSearchStore.from_params` (e.g., `--auth-mode sigv4`).
+> The GitHub Actions `contract-tests` job runs `migrate` and snapshot smoke tests against the
+> containerized OpenSearch service so regressions in the CLI are caught automatically.
 
 ## Observability & Metrics
 
@@ -128,4 +139,3 @@ All CLI commands accept the same flags as `OpenSearchStore.from_params` (e.g., `
 - Set `OPENSEARCH_METRICS_ENABLED=true` to emit simple JSON metrics via the
   `langgraph.opensearch.store.metrics` logger (wire it into Prometheus/Otel via your logging pipeline).
 - `store.get_health()` returns cluster info, template version, and TTL sweeper state for dashboards.
-

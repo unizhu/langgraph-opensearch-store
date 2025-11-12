@@ -7,7 +7,7 @@ import logging
 import time
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 from langchain_core.embeddings import Embeddings
 from langgraph.store.base import (
@@ -162,6 +162,66 @@ class OpenSearchStore(BaseStore):
             "last_sweep": last_run.isoformat() if last_run else None,
         }
 
+    @property
+    def index_config(self) -> dict[str, Any]:
+        return {
+            "data_index": self.settings.data_index_alias,
+            "namespace_index": self.settings.namespace_index_name,
+            "template_version": self.settings.template_version,
+        }
+
+    @property
+    def embeddings(self) -> Embeddings | None:  # type: ignore[override]
+        return self._embeddings
+
+    def migrate(self, *, rollover: bool = False, new_index: str | None = None) -> dict[str, Any]:
+        manager = TemplateManager(self.client, self.settings)
+        return manager.upgrade(rollover=rollover, new_index=new_index)
+
+    def create_snapshot(
+        self,
+        *,
+        repository: str,
+        snapshot: str,
+        indices: Sequence[str] | None = None,
+        wait: bool = True,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {}
+        if indices:
+            body["indices"] = ",".join(indices)
+        if metadata:
+            body["metadata"] = dict(metadata)
+        response = self.client.snapshot.create(
+            repository=repository,
+            snapshot=snapshot,
+            body=body or None,
+            wait_for_completion=wait,
+        )
+        return response
+
+    def restore_snapshot(
+        self,
+        *,
+        repository: str,
+        snapshot: str,
+        indices: Sequence[str] | None = None,
+        wait: bool = True,
+    ) -> Any:
+        body: dict[str, Any] = {}
+        if indices:
+            body["indices"] = ",".join(indices)
+        response = self.client.snapshot.restore(
+            repository=repository,
+            snapshot=snapshot,
+            body=body or None,
+            wait_for_completion=wait,
+        )
+        return response
+
+    def delete_snapshot(self, *, repository: str, snapshot: str) -> Any:
+        return self.client.snapshot.delete(repository=repository, snapshot=snapshot)
+
     # ------------------------------------------------------------------
     # BaseStore API
     def batch(self, ops: Iterable[Op]) -> list[Any]:
@@ -220,7 +280,7 @@ class OpenSearchStore(BaseStore):
 
         ttl_minutes = self._resolve_ttl_minutes(op.ttl)
         payload = self._document_body(namespace, op.key, op.value, ttl_minutes=ttl_minutes)
-        self.client.index(index=index, id=doc_id, document=payload)
+        self.client.index(index=index, id=doc_id, body=payload)
         self._update_namespace_stats(namespace, delta=0 if existed else 1)
         return None
 

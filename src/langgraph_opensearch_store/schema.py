@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from .config import Settings
@@ -72,6 +73,26 @@ class TemplateManager:
         self._ensure_namespace_index()
         self._ensure_bootstrap_index()
 
+    def upgrade(self, *, rollover: bool = False, new_index: str | None = None) -> dict[str, Any]:
+        """Reapply templates and optionally roll the data alias to a fresh index."""
+
+        summary: dict[str, Any] = {"rolled_over": False, "new_index": None}
+        self._ensure_data_template()
+        self._ensure_namespace_index()
+        if rollover:
+            target = new_index or self._next_rollover_index()
+            response = self.client.indices.rollover(
+                alias=self.settings.data_index_alias,
+                new_index=target,
+                body={"conditions": {"max_docs": 0}},
+                dry_run=False,
+                ignore=[400],
+            )
+            summary["rolled_over"] = bool(response.get("rolled_over"))
+            summary["new_index"] = response.get("new_index", target)
+        self._ensure_bootstrap_index()
+        return summary
+
     # -------------------------------------------------
     def _ensure_data_template(self) -> None:
         template_name = f"{self.settings.index_prefix}-data-template-v{self.settings.template_version}"
@@ -91,3 +112,7 @@ class TemplateManager:
         exists = self.client.indices.exists(index=index_name)
         if not exists:
             self.client.indices.create(index=index_name, body=namespace_index_body(), ignore=[400])
+
+    def _next_rollover_index(self) -> str:
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        return f"{self.settings.index_prefix}-data-v{self.settings.template_version:02d}-{timestamp}"
