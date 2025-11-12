@@ -1,10 +1,15 @@
 # Contract Test Harness
 
-The `tests/contract` suite compares `OpenSearchStore` versus LangGraph's `PostgresStore`. It requires
-external services and is skipped unless the following environment variables are set:
+The `tests/contract` suite compares `OpenSearchStore` versus LangGraph's `PostgresStore`. When the
+official Postgres adapter isn't available, the suite falls back to a lightweight in-memory reference
+store so parity checks still run on developer machines. It requires external services and is skipped
+unless the following environment variables are set:
 
 - `POSTGRES_DSN` — e.g. `postgresql://postgres:postgres@localhost:5432/langgraph`
 - `OPENSEARCH_CONN` — e.g. `http://admin:admin@localhost:9200/?search_mode=hybrid&ttl_minutes=60`
+
+If the Postgres adapter is installed, you must also provide `POSTGRES_DSN`. When the adapter is not
+present, only `OPENSEARCH_CONN` is required.
 
 ## Running Locally
 

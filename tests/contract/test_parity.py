@@ -1,11 +1,12 @@
 import importlib
 import os
 from collections.abc import Iterator
-from typing import Iterable, Protocol, cast
+from typing import Any, Iterable, Protocol, cast
 
 import pytest
 
 from langgraph_opensearch_store.store import OpenSearchStore
+from langgraph.store.memory import InMemoryStore
 
 
 class _PostgresStoreProto(Protocol):
@@ -22,27 +23,61 @@ class _PostgresStoreProto(Protocol):
     def delete(self, namespace, key) -> None:
         ...
 
-    def get(self, namespace, key):
+    def get(self, namespace, key) -> Any:
         ...
+
+    def search(self, namespace_prefix, *, query: str | None, limit: int) -> Any:
+        ...
+
+    def list_namespaces(self, prefix) -> Any:
+        ...
+
+    def get_stats(self) -> Any:
+        ...
+
+class _MemoryReferenceStore(_PostgresStoreProto):
+    def __init__(self) -> None:
+        self._store = InMemoryStore()
+
+    @classmethod
+    def from_conn_string(cls, dsn: str) -> "_MemoryReferenceStore":
+        return cls()
+
+    def setup(self) -> None:  # pragma: no cover - nothing to do
+        return None
+
+    def put(self, namespace, key, value) -> None:
+        self._store.put(namespace, key, value)
+
+    def delete(self, namespace, key) -> None:
+        self._store.delete(namespace, key)
+
+    def get(self, namespace, key):
+        return self._store.get(namespace, key)
 
     def search(self, namespace_prefix, *, query: str | None, limit: int):
-        ...
+        return self._store.search(namespace_prefix, query=query, limit=limit)
 
     def list_namespaces(self, prefix):
-        ...
+        return self._store.list_namespaces(prefix=prefix)
 
     def get_stats(self):
-        ...
+        total = sum(len(items) for items in self._store._data.values())  # type: ignore[attr-defined]
+        return {"total_items": total}
 
-def _load_postgres_store() -> type[_PostgresStoreProto] | None:
+
+def _load_postgres_store() -> tuple[type[_PostgresStoreProto], str]:
     try:
         module = importlib.import_module("langgraph.store.postgres")
     except ModuleNotFoundError:
-        return None
-    return cast(type[_PostgresStoreProto], getattr(module, "PostgresStore", None))
+        return _MemoryReferenceStore, "memory"
+    pg_cls = cast(type[_PostgresStoreProto], getattr(module, "PostgresStore", None))
+    if pg_cls is None:
+        return _MemoryReferenceStore, "memory"
+    return pg_cls, "postgres"
 
 
-PostgresStore = _load_postgres_store()
+ReferenceStore, REFERENCE_IMPL = _load_postgres_store()
 
 DATASET = [
     (("prefs", "user_a"), "color", {"text": "I like blue"}),
@@ -54,26 +89,33 @@ pytestmark = pytest.mark.contract
 
 
 def _require_env() -> tuple[str, str]:
-    if PostgresStore is None:
-        pytest.skip("Postgres store not available")
-    pg_dsn = os.getenv("POSTGRES_DSN")
     os_conn = os.getenv("OPENSEARCH_CONN")
-    if not pg_dsn or not os_conn:
-        pytest.skip("Set POSTGRES_DSN and OPENSEARCH_CONN to run contract tests")
+    missing: list[str] = []
+    pg_dsn: str | None
+    if REFERENCE_IMPL == "postgres":
+        pg_dsn = os.getenv("POSTGRES_DSN")
+        if not pg_dsn:
+            missing.append("POSTGRES_DSN")
+    else:
+        pg_dsn = "memory://local"
+    if not os_conn:
+        missing.append("OPENSEARCH_CONN")
+    if missing:
+        pytest.skip("Set " + " and ".join(missing) + " to run contract tests")
+    assert pg_dsn is not None
+    assert os_conn is not None
     return pg_dsn, os_conn
 
 
 @pytest.fixture()
 def reference_store() -> Iterator[_PostgresStoreProto]:
     pg_dsn, _ = _require_env()
-    if PostgresStore is None:
-        pytest.skip("langgraph[postgres] extra not installed")
-    pg_cls = cast(type[_PostgresStoreProto], PostgresStore)
-    store: _PostgresStoreProto = pg_cls.from_conn_string(pg_dsn)
+    store: _PostgresStoreProto = ReferenceStore.from_conn_string(pg_dsn)
     store.setup()
     _load_dataset(store)
     yield store
-    _truncate_store(store)
+    if REFERENCE_IMPL == "postgres":
+        _truncate_store(store)
 
 
 @pytest.fixture()

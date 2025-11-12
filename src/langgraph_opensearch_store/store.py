@@ -280,7 +280,7 @@ class OpenSearchStore(BaseStore):
 
         ttl_minutes = self._resolve_ttl_minutes(op.ttl)
         payload = self._document_body(namespace, op.key, op.value, ttl_minutes=ttl_minutes)
-        self.client.index(index=index, id=doc_id, body=payload)
+        self.client.index(index=index, id=doc_id, document=payload)
         self._update_namespace_stats(namespace, delta=0 if existed else 1)
         return None
 
