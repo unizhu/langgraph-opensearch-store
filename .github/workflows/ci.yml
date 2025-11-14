@@ -32,6 +32,8 @@ jobs:
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
     permissions:
       contents: read
       id-token: write
@@ -43,10 +45,8 @@ jobs:
       - run: uv sync --all-extras
       - run: uv build
       - name: Publish to PyPI
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.UV_PUBLISH_TOKEN }}
         run: uv publish
-        
+
   contract-tests:
     needs: test
     if: github.event_name == 'workflow_dispatch'
