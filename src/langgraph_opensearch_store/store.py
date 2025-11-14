@@ -337,7 +337,17 @@ class OpenSearchStore(BaseStore):
         if self._embeddings is not None:
             text = self._extract_text(value)
             if text:
-                body["embedding"] = self._embeddings.embed_query(text)
+                try:
+                    embedding_vector = self._embeddings.embed_query(text)
+                except Exception:  # pragma: no cover - provider failures
+                    logger.warning("embedding_failure", exc_info=True)
+                    embedding_vector = None
+                if embedding_vector:
+                    body["embedding"] = embedding_vector
+                else:
+                    logger.debug(
+                        "embedding_skip", extra={"namespace": namespace, "key": key}
+                    )
         return body
 
     def _extract_text(self, value: Mapping[str, Any]) -> str | None:
